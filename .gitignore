@@ -8,3 +8,4 @@
 /tags
 /Gemfile.lock
 clacks*.gem
+.idea*
