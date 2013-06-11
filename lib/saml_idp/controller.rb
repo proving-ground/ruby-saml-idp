@@ -71,10 +71,10 @@ module SamlIdp
         timeout = opts[:timeout] || now + (60*24)
 
         # The response, assertion and session id's can be more formally stored, but looking to just generate for moment
-        response_id, assertion_id, session_id = SecureRandom.hex(42), SecureRandom.hex(42), SecureRandom.hex(42)
+        response_id, assertion_id, session_id = SecureRandom.hex(21), SecureRandom.hex(21), SecureRandom.hex(21)
 
         # In theory this is from the server store, but will generate random for now
-        request_issuer_id = opts[:issuer_id] || SecureRandom.hex(42)
+        request_issuer_id = opts[:issuer_id] || SecureRandom.hex(21)
 
         # This needs to be better defined, but aiming for my needs at moment
         idp_uri = opts[:idp_uri] || (defined?(request) && "https://#{request.host_with_port}/") || "http://idp.example.com/"
