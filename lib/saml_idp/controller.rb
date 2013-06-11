@@ -129,7 +129,7 @@ module SamlIdp
 ASSERTION
 
         signature = create_signature(assertion, assertion_id)
-        assertion_and_signature = assertion.sub(/Issuer\>\<Subject/, "Issuer>#{signature}<Subject")
+        assertion_and_signature = assertion.sub(/Issuer\>\<saml/, "Issuer>#{signature}<saml")
 
         response = <<RESPONSE
 <samlp:Response
@@ -149,10 +149,10 @@ ASSERTION
 RESPONSE
 
         signature = create_signature(response, response_id)
-        response.sub(/Issuer\>\<Status/, "Issuer>#{signature}<Status")
+        signed = response.sub(/Issuer\>\<samlp/, "Issuer>#{signature}<samlp")
 
-        logger.debug("SAML Response: #{response}")
-        Base64.encode64(response)
+        logger.debug("SAML Response: #{signed}")
+        Base64.encode64(signed)
       end
 
     private
