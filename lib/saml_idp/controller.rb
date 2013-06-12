@@ -166,7 +166,7 @@ RESPONSE
 
     def sign(data)
       key = OpenSSL::PKey::RSA.new(self.secret_key)
-      Base64.encode64(key.sign(algorithm.new, data))
+      Base64.encode64(key.sign(OpenSSL::Digest::SHA1.new, data))
     end
   end
 end
