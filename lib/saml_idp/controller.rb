@@ -29,11 +29,11 @@ module SamlIdp
       @algorithm = algorithm
       if algorithm.is_a?(Symbol)
         @algorithm = case algorithm
-        when :sha256 then OpenSSL::Digest::SHA256
-        when :sha384 then OpenSSL::Digest::SHA384
-        when :sha512 then OpenSSL::Digest::SHA512
+        when :sha256 then Digest::SHA256
+        when :sha384 then Digest::SHA384
+        when :sha512 then Digest::SHA512
         else
-          OpenSSL::Digest::SHA1
+          Digest::SHA1
         end
       end
       @algorithm
@@ -158,7 +158,7 @@ RESPONSE
     private
 
     def create_signature(xml_block, reference_id)
-      digest_value = Base64.encode64(algorithm.digest(xml_block)).gsub(/\n/, '')
+      digest_value = algorithm.base64digest(xml_block)
       signed_info = %[<ds:SignedInfo><ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/><ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-#{algorithm_name}"/><ds:Reference URI="#_#{reference_id}"><ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/></ds:Transforms><ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig##{algorithm_name}"/><ds:DigestValue>#{digest_value}</ds:DigestValue></ds:Reference></ds:SignedInfo>]
       signature_value = sign(signed_info).gsub(/\n/, '')
       %[<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">#{signed_info}<ds:SignatureValue>#{signature_value}</ds:SignatureValue><ds:KeyInfo><ds:X509Data><ds:X509Certificate>#{self.x509_certificate}</ds:X509Certificate></ds:X509Data></ds:KeyInfo></ds:Signature>]
