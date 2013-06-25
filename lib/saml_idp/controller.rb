@@ -117,12 +117,14 @@ module SamlIdp
         logger.debug("Got zstream...")
         deflated = zstream.deflate(response)
         logger.debug("deflated...")
+        encoded = Base64.encode64(deflated)
+        logger.debug("encoded...")
       rescue Zlib::StreamError => e
         logger.error e
         logger.error e.backtrace.join("\n")
         raise e
       end
-      Base64.encode64(deflated)
+      Rack::Utils.escape(encoded)
     end
 
     # private methods... no peeking.
