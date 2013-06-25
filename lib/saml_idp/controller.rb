@@ -43,53 +43,79 @@ module SamlIdp
       algorithm.to_s.split('::').last.downcase
     end
 
+    # protected methods section
     protected
 
-      def validate_saml_request(saml_request = params[:SAMLRequest])
-        decode_request(saml_request)
-      end
+    def decode_login_request(saml_request)
+      zstream  = Zlib::Inflate.new(-Zlib::MAX_WBITS)
+      @saml_request = zstream.inflate(Base64.decode64(saml_request))
+      zstream.finish
+      zstream.close
+      logger.debug "Received request: #{@saml_request}"
+      @saml_request_id = @saml_request[/ID=['"](.+?)['"]/, 1]
+      logger.debug "SAML Request ID: #{@saml_request_id}"
+      @saml_acs_url = @saml_request[/AssertionConsumerServiceURL=['"](.+?)['"]/, 1]
+      logger.debug "SAML ACS URL: #{@saml_acs_url}"
+      @saml_issuer = @saml_request[/Issuer\>(.+?)\</, 1]
+      logger.debug "SAML Issuer: #{@saml_issuer}"
+    end
 
-      def decode_request(saml_request)
-        zstream  = Zlib::Inflate.new(-Zlib::MAX_WBITS)
-        @saml_request = zstream.inflate(Base64.decode64(saml_request))
-        zstream.finish
-        zstream.close
-        logger.debug "Received request: #{@saml_request}"
-        @saml_request_id = @saml_request[/ID=['"](.+?)['"]/, 1]
-        logger.debug "SAML Request ID: #{@saml_request_id}"
-        @saml_acs_url = @saml_request[/AssertionConsumerServiceURL=['"](.+?)['"]/, 1]
-        logger.debug "SAML ACS URL: #{@saml_acs_url}"
-        @saml_issuer = @saml_request[/Issuer\>(.+?)\</, 1]
-        logger.debug "SAML Issuer: #{@saml_issuer}"
-      end
+    def decode_logout_request(saml_request)
+      zstream  = Zlib::Inflate.new(-Zlib::MAX_WBITS)
+      @saml_request = zstream.inflate(Base64.decode64(saml_request))
+      zstream.finish
+      zstream.close
+      logger.debug "Received request: #{@saml_request}"
+      @saml_request_id = @saml_request[/ID=['"](.+?)['"]/, 1]
+      logger.debug "SAML Request ID: #{@saml_request_id}"
+      @saml_issuer = @saml_request[/Issuer\>(.+?)\</, 1]
+      logger.debug "SAML Issuer: #{@saml_issuer}"
+    end
 
-      def encode_response(request_id, request_acs_url, request_issuer_name, opts = {})
-        # various time nuggets needed in construction of response
-        now = opts[:now] || Time.now.utc
-        before_now = opts[:before_now] || now - 5
-        after_now = opts[:after_now] || now + 5
-        timeout = opts[:timeout] || now + (60*24)
+    def encode_login_response(request_id, request_acs_url, request_issuer_name, opts = {})
+      # various time nuggets needed in construction of response
+      now = opts[:now] || Time.now.utc
+      before_now = opts[:before_now] || now - 5
+      after_now = opts[:after_now] || now + 5
+      timeout = opts[:timeout] || now + (60*24)
 
-        # The response, assertion and session id's can be more formally stored, but looking to just generate for moment
-        response_id, assertion_id, session_id = SecureRandom.hex(21), SecureRandom.hex(21), SecureRandom.hex(21)
+      # The response, assertion and session id's can be more formally stored, but looking to just generate for moment
+      response_id, assertion_id, session_id = SecureRandom.hex(21), SecureRandom.hex(21), SecureRandom.hex(21)
 
-        # In theory this is from the server store, but will generate random for now
-        request_issuer_id = opts[:issuer_id] || SecureRandom.hex(21)
+      # In theory this is from the server store, but will generate random for now
+      request_issuer_id = opts[:issuer_id] || SecureRandom.hex(21)
 
-        # This needs to be better defined, but aiming for my needs at moment
-        idp_uri = opts[:idp_uri] || (defined?(request) && "https://#{request.host_with_port}/") || "http://idp.example.com/"
+      # This needs to be better defined, but aiming for my needs at moment
+      idp_uri = opts[:idp_uri] || (defined?(request) && "https://#{request.host_with_port}/") || "http://idp.example.com/"
 
-        assertion = %[<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_#{assertion_id}" IssueInstant="#{now.iso8601}" Version="2.0"><saml:Issuer>#{idp_uri}</saml:Issuer><saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:transient" SPNameQualifier="#{request_issuer_name}">_#{request_issuer_id}</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData InResponseTo="#{request_id}" NotOnOrAfter="#{after_now.iso8601}" Recipient="#{request_acs_url}"></saml:SubjectConfirmationData></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="#{before_now.iso8601}" NotOnOrAfter="#{after_now.iso8601}"><saml:AudienceRestriction><saml:Audience>#{request_issuer_name}</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="#{now.iso8601}" SessionIndex="_#{session_id}" SessionNotOnOrAfter="#{timeout.iso8601}"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:Password</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement><saml:Attribute Name="firstName" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">#{opts[:first_name]}</saml:AttributeValue></saml:Attribute><saml:Attribute Name="lastName" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">#{opts[:last_name]}</saml:AttributeValue></saml:Attribute><saml:Attribute Name="email" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">#{opts[:email]}</saml:AttributeValue></saml:Attribute><saml:Attribute Name="externalId" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">#{opts[:account_id]}</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion>]
-        signature = create_signature(assertion, assertion_id)
-        assertion_and_signature = assertion.sub(/\<saml:Subject/, "#{signature}<saml:Subject")
-        response = %[<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_#{response_id}" Version="2.0" IssueInstant="#{now.iso8601}" Destination="#{@saml_acs_url}" InResponseTo="#{@saml_request_id}"><saml:Issuer>#{idp_uri}</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>#{assertion_and_signature}</samlp:Response>]
-        signature = create_signature(response, response_id)
-        signed = response.sub(/\<samlp:Status/, "#{signature}<samlp:Status")
+      assertion = %[<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_#{assertion_id}" IssueInstant="#{now.iso8601}" Version="2.0"><saml:Issuer>#{idp_uri}</saml:Issuer><saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:transient" SPNameQualifier="#{request_issuer_name}">_#{request_issuer_id}</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData InResponseTo="#{request_id}" NotOnOrAfter="#{after_now.iso8601}" Recipient="#{request_acs_url}"></saml:SubjectConfirmationData></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="#{before_now.iso8601}" NotOnOrAfter="#{after_now.iso8601}"><saml:AudienceRestriction><saml:Audience>#{request_issuer_name}</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="#{now.iso8601}" SessionIndex="_#{session_id}" SessionNotOnOrAfter="#{timeout.iso8601}"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:Password</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement><saml:Attribute Name="firstName" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">#{opts[:first_name]}</saml:AttributeValue></saml:Attribute><saml:Attribute Name="lastName" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">#{opts[:last_name]}</saml:AttributeValue></saml:Attribute><saml:Attribute Name="email" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">#{opts[:email]}</saml:AttributeValue></saml:Attribute><saml:Attribute Name="externalId" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">#{opts[:account_id]}</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion>]
+      signature = create_signature(assertion, assertion_id)
+      assertion_and_signature = assertion.sub(/\<saml:Subject/, "#{signature}<saml:Subject")
+      response = %[<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_#{response_id}" Version="2.0" IssueInstant="#{now.iso8601}" Destination="#{@saml_acs_url}" InResponseTo="#{@saml_request_id}"><saml:Issuer>#{idp_uri}</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>#{assertion_and_signature}</samlp:Response>]
+      signature = create_signature(response, response_id)
+      signed = response.sub(/\<samlp:Status/, "#{signature}<samlp:Status")
 
-        logger.debug("SAML Response: #{signed}")
-        Base64.encode64(signed)
-      end
+      logger.debug("SAML Response: #{signed}")
+      Base64.encode64(signed)
+    end
 
+    def encode_logout_response(request_id, response_url, opts = {})
+      # various time nuggets needed in construction of response
+      now = opts[:now] || Time.now.utc
+
+      # The response, assertion and session id's can be more formally stored, but looking to just generate for moment
+      response_id = SecureRandom.hex(21)
+
+      # This needs to be better defined, but aiming for my needs at moment
+      idp_uri = opts[:idp_uri] || (defined?(request) && "https://#{request.host_with_port}/") || "http://idp.example.com/"
+
+      response = %[<samlp:LogoutResponse xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_#{response_id}" Version="2.0" IssueInstant="#{now.iso8601}" Destination="#{response_url}" InResponseTo="_#{request_id}"><saml:Issuer>#{idp_uri}</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status></samlp:LogoutResponse>]
+
+      logger.debug("SAML Response: #{response}")
+      Base64.encode64(response)
+    end
+
+    # private methods... no peeking.
     private
 
     def create_signature(xml_block, reference_id)
