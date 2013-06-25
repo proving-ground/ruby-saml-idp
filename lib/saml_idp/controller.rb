@@ -113,9 +113,8 @@ module SamlIdp
 
       logger.debug("SAML Response: #{response}")
       begin
-        zstream  = Zlib::Deflate.new()
-        logger.debug("Got zstream...")
-        deflated = zstream.deflate(response)
+        logger.debug("deflating...")
+        deflated = Zlib::Deflate.deflate(response, 9)[2..-5]
         logger.debug("deflated...")
         encoded = Base64.encode64(deflated)
         logger.debug("encoded...")
@@ -124,6 +123,7 @@ module SamlIdp
         logger.error e.backtrace.join("\n")
         raise e
       end
+      logger.debug("escaping...")
       Rack::Utils.escape(encoded)
     end
 
