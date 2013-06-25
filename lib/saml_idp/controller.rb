@@ -113,13 +113,13 @@ module SamlIdp
 
       logger.debug("SAML Response: #{response}")
       begin
-        zstream  = Zlib::Deflate.new(-Zlib::MAX_WBITS)
+        zstream  = Zlib::Deflate.new()
         logger.debug("Got zstream...")
         deflated = zstream.deflate(response)
         logger.debug("deflated...")
       rescue Zlib::StreamError => e
         logger.error e
-        logger.error e.backtrace
+        logger.error e.backtrace.join("\n")
         raise e
       end
       Base64.encode64(deflated)
