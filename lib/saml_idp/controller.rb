@@ -112,8 +112,17 @@ module SamlIdp
       response = %[<samlp:LogoutResponse xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_#{response_id}" Version="2.0" IssueInstant="#{now.iso8601}" Destination="#{response_url}" InResponseTo="_#{request_id}"><saml:Issuer>#{idp_uri}</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status></samlp:LogoutResponse>]
 
       logger.debug("SAML Response: #{response}")
-      zstream  = Zlib::Deflate.new(-Zlib::MAX_WBITS)
-      Base64.encode64(zstream.deflate(response))
+      begin
+        zstream  = Zlib::Deflate.new(-Zlib::MAX_WBITS)
+        logger.debug("Got zstream...")
+        deflated = zstream.deflate(response)
+        logger.debug("deflated...")
+      rescue Zlib::StreamError => e
+        logger.error e
+        logger.error e.backtrace
+        raise e
+      end
+      Base64.encode64(deflated)
     end
 
     # private methods... no peeking.
